@@ -1,0 +1,4 @@
+dataset train path: ./data/data2/out/train/train.csv
+cold_user score: 0.274
+cold_item score: 0.768
+warm score: 0.304
