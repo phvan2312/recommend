@@ -36,7 +36,7 @@ def get_random_k(matrix, k):
 
     return vals, col_inds
 
-def data_augment(R,n_items_per_user,batch_size, u_pref, v_pref):
+def data_augment(R,n_items_per_user,batch_size,u_pref,v_pref,u_bias,v_bias):
     """
     :param R: training rating matrix
     :param n_items_per_user: each user will be trained with 2*n_items_per_user items
@@ -61,7 +61,7 @@ def data_augment(R,n_items_per_user,batch_size, u_pref, v_pref):
     for (s,e) in user_batch_sizes:
         user_ids = unique_user_ids[s:e]
 
-        sub_R = np.dot(u_pref[user_ids, :], v_pref.T)
+        sub_R = np.dot(u_pref[user_ids, :], v_pref.T) + u_bias[user_ids,:] + v_bias.T
         topk_u_ids = rand_u_ids = np.repeat(user_ids,n_items_per_user)
 
         topk_ratings, topk_i_ids = get_top_k(matrix=sub_R,k=n_items_per_user)
@@ -241,6 +241,34 @@ def extract_cold_item_from_R(R, split_percent=0.1):
 
     return result[:,[1,0,2]], selected_ids
 
+def score_eval_batch_map(datas,model,topks):
+    tf_eval_preds_batch = []
+
+    for i in range(len(datas.eval_batchs)):
+        tf_eval_preds, _ = model.run(datas=datas, mode=model.inf_signal, batch_id=i)
+        tf_eval_preds_batch.append(tf_eval_preds)
+    tf_eval_preds = np.concatenate(tf_eval_preds_batch)
+
+    y_nz = [sum(x) > 0 for x in datas.target]
+    y_nz = np.arange(datas.target.shape[0])[y_nz]
+
+    preds_all = tf_eval_preds[y_nz, :]
+    y = datas.target[y_nz, :]
+
+    results = []
+    for topk in topks:
+        preds_all_topk = preds_all[:,:topk]
+
+        x = scipy.sparse.lil_matrix(y.shape)
+        x.rows = preds_all_topk
+        x.data = np.ones_like(preds_all_topk)
+        x = x.toarray()
+
+        z = x * y
+        results.append(np.mean(np.divide((np.sum(z, 1)), np.sum(y, 1))))
+
+    return np.mean(np.asarray(results))
+
 def score_eval_batch(datas,model):
     tf_eval_preds_batch = []
 
@@ -262,3 +290,40 @@ def score_eval_batch(datas,model):
 
     z = x * y
     return np.mean(np.divide((np.sum(z, 1)), np.sum(y, 1)))
+
+def apk(actual, predicted, k=10):
+    """
+    Computes the average precision at k.
+    This function computes the average prescision at k between two lists of
+    items.
+    Parameters
+    ----------
+    actual : list
+             A list of elements that are to be predicted (order doesn't matter)
+    predicted : list
+                A list of predicted elements (order does matter)
+    k : int, optional
+        The maximum number of predicted elements
+    Returns
+    -------
+    score : double
+            The average precision at k over the input lists
+    """
+    if len(predicted)>k:
+        predicted = predicted[:k]
+
+    score = 0.0
+    num_hits = 0.0
+
+    for i,p in enumerate(predicted):
+        if p in actual and p not in predicted[:i]:
+            num_hits += 1.0
+            score += num_hits / (i+1.0)
+
+    if not actual:
+        return 0.0
+
+    return score / min(len(actual), k)
+
+if __name__ == '__main__':
+    print apk(actual=[1,2,3,4,5], predicted=[6,4,7,1,2],k=5)

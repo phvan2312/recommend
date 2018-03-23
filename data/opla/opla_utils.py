@@ -2,6 +2,7 @@ import json
 import numpy as np
 from pymf.nmf import NMF
 import pandas as pd
+import json
 
 def matrix_decomposite(R,k=200,n_iter=200):
     """
@@ -45,7 +46,7 @@ def get_item_detail(item):
     key = 'skills'
     value = item.get(key, '')
 
-    results = []
+    results = {'work':[],'skill':[]}
 
     for elems in value:
         if type(elems) is list:
@@ -55,11 +56,10 @@ def get_item_detail(item):
                 working_position = work_pos.get('summary', work_pos.get('studyType', ''))
                 working_place = work_pos.get('company', work_pos.get('institution', ''))
 
-                results.append("work: %s, place: %s" % (working_position, working_place))
+                results['work'].append({'work':working_position,'place':working_place})
         else:
             skill = elems['skill']
-
-            results.append("skill: %s" % (skill))
+            results['skill'].append({'skill':skill})
 
     return results
 
@@ -82,13 +82,10 @@ def get_profile_detail(profile):
         for work_dct in _profile.get(required_key,[]):
             company = work_dct.get('company','')
             position = work_dct.get('summary','')
-            desc = work_dct.get('desc','')
 
-            result = "work: %s, position: %s, desc: %s" % (company,position,desc)
-            results.append(result)
+            results.append({'company':company,'position':position})
 
-        results = list(set(results))
-        results = ' ; '.join(results)
+        results = json.dumps(results)
 
         return required_key, results
 
@@ -100,20 +97,23 @@ def get_profile_detail(profile):
             institution = education_dct.get('institution','')
             study = education_dct.get('studyType','')
 
-            result = "study: %s, institution: %s" % (study, institution)
-            results.append(result)
+            #result = "study: %s, institution: %s" % (study, institution)
+            results.append({'institution':institution,'study':study})
 
-        results = list(set(results))
-        results = ' ; '.join(results)
+        #results = list(set(results))
+        #results = ' ; '.join(results)
+
+        results = json.dumps(results)
 
         return required_key, results
 
     def get_skills_detail(_profile):
         required_key = 'skills'
 
-        results = [e for e in _profile.get(required_key,[])]
-        results = list(set(results))
-        results = " ; ".join(results)
+        results = [{'skill':e} for e in _profile.get(required_key,[])]
+        #results = list(set(results))
+        #results = " ; ".join(results)
+        results = json.dumps(results)
 
         return required_key, results
 
@@ -155,11 +155,14 @@ def get_metadata(datas):
 
                     item_detail = get_item_detail(v)
 
-                    item_detail_to_str = " ; ".join(list(set(item_detail)))
+                    #item_detail_to_str = json.dumps(item_detail) #" ; ".join(list(set(item_detail)))
                     if k in item_details:
-                        item_details[k].append(item_detail_to_str)
+                        item_details[k]['work'].append(item_detail['work'])
+                        item_details[k]['skill'].append(item_detail['skill'])
                     else:
-                        item_details[k] = [item_detail_to_str]
+                        item_details[k] = {}
+                        item_details[k]['work'] = [item_detail['work']]
+                        item_details[k]['skill'] = [item_detail['skill']]
 
                     utility_matrix.append({
                         'profile': profile_name,
@@ -167,7 +170,9 @@ def get_metadata(datas):
                         'rating':v['point']
                     })
 
-    return utility_matrix, item_details, profile_details
+    return utility_matrix, \
+           {k:{'work':json.dumps(v['work']),'skill':json.dumps(v['skill'])} for k,v in item_details.items()}, \
+           profile_details
 
 def get_ids_rated_by_x(R,x_id,x_col_id):
     ids = np.where(R[:,x_col_id] == x_id)[0]

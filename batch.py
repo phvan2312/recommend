@@ -66,10 +66,10 @@ class TrainBatchSample:
         #
         # need for placeholder
         #
-        self.u_pref_row_ids = vocab_user_ids #self.mapping_user_ids.keys()
-        self.u_content_row_ids = vocab_user_ids #self.mapping_user_ids.keys()
-        self.v_pref_row_ids = vocab_item_ids #self.mapping_item_ids.keys()
-        self.v_content_row_ids = vocab_item_ids #self.mapping_item_ids.keys()
+        self.u_pref_row_ids = vocab_user_ids
+        self.u_content_row_ids = vocab_user_ids
+        self.v_pref_row_ids = vocab_item_ids
+        self.v_content_row_ids = vocab_item_ids
 
         self.rows = [self.mapping_user_ids[user_id] for user_id in self.user_ids]
         self.cols = [self.mapping_item_ids[item_id] for item_id in self.item_ids]

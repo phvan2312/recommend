@@ -26,6 +26,8 @@ class RecommendNet:
         self.default_lr = default_lr
         self.train_signal, self.inf_signal = 'training', 'inference'
 
+
+
     def get_params(self):
         params = {
             'latent_dim' : self.latent_dim,
@@ -172,6 +174,8 @@ class RecommendNet:
     def __check_correct_data(self, datas, mode):
         assert isinstance(datas, TrainBatchSample) or isinstance(datas,EvalBatchSample)
         assert mode in [self.train_signal, self.inf_signal]
+
+
 
     def create_input(self, datas, mode='training',**kargs):
         self.__check_correct_data(datas,mode)
