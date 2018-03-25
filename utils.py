@@ -3,8 +3,8 @@ import pandas as pd
 from sklearn import datasets
 from sklearn.preprocessing import StandardScaler
 from batch import TrainBatchSample, EvalBatchSample
-from pymf.nmf import NMF
-import scipy
+#from pymf.nmf import NMF
+
 
 def get_top_k(matrix,k):
     """
@@ -35,6 +35,81 @@ def get_random_k(matrix, k):
     vals = matrix[row_inds, col_inds]
 
     return vals, col_inds
+
+from scipy.sparse import csr_matrix
+def data_augment_v2(R,n_items_per_user,batch_size):
+    """
+    :param R: training rating matrix
+    :param n_items_per_user: each user will be trained with 2*n_items_per_user items
+    :param batch_size: user batch size
+    :return: R with more samples
+    """
+
+    new_R = {
+        'uid': [],
+        'iid': [],
+        'rating': []
+    }
+
+    row,col,ratings = R['profile'].values, R['item'].values, R['rating'].values
+    n_user = np.max(row) + 1
+    n_item = np.max(col) + 1
+
+    rating_matrix = csr_matrix((ratings, (row, col)), shape=(n_user, n_item)).toarray()
+    batch_ids = [(s,min(s + batch_size, n_user)) for s in range(0,n_user,batch_size)]
+
+    user_ids = np.arange(n_user)
+
+    for (s,e) in batch_ids:
+        topk_u_ids = rand_u_ids = np.repeat(user_ids[s:e], n_items_per_user)
+
+        topk_ratings, topk_i_ids = get_top_k(matrix=rating_matrix[s:e,:], k=n_items_per_user)
+        rand_ratings, rand_i_ids = get_random_k(matrix=rating_matrix[s:e,:], k=n_items_per_user)
+
+        fn_ratings = np.append(topk_ratings, rand_ratings)
+        fn_u_ids = np.append(topk_u_ids, rand_u_ids)
+        fn_i_ids = np.append(topk_i_ids, rand_i_ids)
+
+        new_R['iid'].extend(fn_i_ids)
+        new_R['uid'].extend(fn_u_ids)
+        new_R['rating'].extend(fn_ratings)
+
+    return pd.DataFrame(new_R, columns=['uid', 'iid', 'rating']).as_matrix()
+
+    # new_R = {
+    #     'uid'  : [],
+    #     'iid'  : [],
+    #     'rating':[]
+    # }
+    #
+    # n_max_user = 0
+    # n_max_item = 0
+    #
+    # R_matrix = None
+    #
+    # unique_user_ids = np.unique(R[:,0])
+    # n_user = len(unique_user_ids)
+    #
+    # user_batch_sizes = [(s,min(s + batch_size, n_user)) for s in range(0,n_user,batch_size)]
+    #
+    # for (s,e) in user_batch_sizes:
+    #     user_ids = unique_user_ids[s:e]
+    #
+    #     sub_R = np.dot(u_pref[user_ids, :], v_pref.T) + u_bias[user_ids,:] + v_bias.T
+    #     topk_u_ids = rand_u_ids = np.repeat(user_ids,n_items_per_user)
+    #
+    #     topk_ratings, topk_i_ids = get_top_k(matrix=sub_R,k=n_items_per_user)
+    #     rand_ratings, rand_i_ids = get_random_k(matrix=sub_R,k=n_items_per_user)
+    #
+    #     fn_ratings = np.append(topk_ratings, rand_ratings)
+    #     fn_u_ids   = np.append(topk_u_ids, rand_u_ids)
+    #     fn_i_ids   = np.append(topk_i_ids, rand_i_ids)
+    #
+    #     new_R['iid'].extend(fn_i_ids)
+    #     new_R['uid'].extend(fn_u_ids)
+    #     new_R['rating'].extend(fn_ratings)
+    #
+    # return pd.DataFrame(new_R, columns=['uid', 'iid', 'rating']).as_matrix()
 
 def data_augment(R,n_items_per_user,batch_size,u_pref,v_pref,u_bias,v_bias):
     """

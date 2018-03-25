@@ -6,8 +6,7 @@ from batch import TrainBatchSample, EvalBatchSample
 
 class RecommendNet:
     def __init__(self, latent_dim, user_feature_dim, item_feature_dim, out_dim, multilayer_dims = [400], do_batch_norm = True,
-                 default_lr = 0.005, k = 50,
-                 np_u_pref_scaled = None, np_v_pref_scaled = None, np_u_cont = None, np_v_cont = None, **kargs):
+                 default_lr = 0.005, k = 50, **kargs):
 
         self.latent_dim = latent_dim
         self.user_feature_dim = user_feature_dim
@@ -17,32 +16,9 @@ class RecommendNet:
         self.multilayer_dims = multilayer_dims
         self.do_batch_norm = do_batch_norm
 
-        self.np_u_pref_scaled = np_u_pref_scaled
-        self.np_v_pref_scaled = np_v_pref_scaled
-        self.np_u_cont = np_u_cont
-        self.np_v_cont = np_v_cont
-
         self.k = k
         self.default_lr = default_lr
         self.train_signal, self.inf_signal = 'training', 'inference'
-
-    def get_params(self):
-        params = {
-            'latent_dim' : self.latent_dim,
-            'user_feature_dim' : self.user_feature_dim,
-            'item_feature_dim' : self.item_feature_dim,
-            'out_dim' : self.out_dim,
-            'multilayer_dims' : self.multilayer_dims,
-            'do_batch_norm' : self.do_batch_norm,
-            'default_lr' : self.default_lr,
-            'k' : self.k,
-            'np_u_pref_scaled' : None,
-            'np_v_pref_scaled' : None,
-            'np_u_cont' : None,
-            'np_v_cont' : None
-        }
-
-        return params
 
     def batch_normalize(self, data, scope, phase):
         assert hasattr(self,'phase')
@@ -89,13 +65,17 @@ class RecommendNet:
     def __build_placeholder(self):
         self.u_pref = tf.placeholder(dtype=tf.float32, shape=[None,self.latent_dim], name='u_pref') # (n_users, laten_dim)
         self.v_pref = tf.placeholder(dtype=tf.float32, shape=[None,self.latent_dim], name='v_pref') # (n_items, latent_dim)
+
         self.u_content = tf.placeholder(dtype=tf.float32, shape=[None,self.user_feature_dim], name='u_content') # (n_users, user_feature_dim)
         self.v_content = tf.placeholder(dtype=tf.float32, shape=[None,self.item_feature_dim],name='v_content') # (n_items, item_feature_dim)
+
+        self.u_bias = tf.placeholder(dtype=tf.float32,shape=[None,1],name='u_bias') # n_user,
+        self.v_bias = tf.placeholder(dtype=tf.float32,shape=[None,1],name='v_bias') # n_item,
 
         if self.do_batch_norm: self.phase = tf.placeholder(tf.bool, name='phase')
 
         self.topk = tf.placeholder_with_default(input=self.k,shape=[],name='topk')
-        self.target = tf.placeholder(dtype=tf.float32, shape=[None, None], name='target')
+        self.target = tf.placeholder(dtype=tf.float32, shape=[None,], name='target')
         self.row_col_ids = tf.placeholder(dtype=tf.int32, shape=[None, None], name='row_col_ids')
         self.lr = tf.placeholder(dtype=tf.float32,shape=[],name='lr')
 
@@ -142,12 +122,15 @@ class RecommendNet:
 
 
         with tf.variable_scope('build_loss'):
-            self.predicted_R = tf.matmul(self.u_hat,self.v_hat,transpose_b=True,name='predicted_R')
+            self.predicted_R = tf.matmul(self.u_hat,self.v_hat,transpose_b=True,name='predicted_R') \
+                               + tf.reshape(self.u_bias,shape=(-1,1)) + tf.reshape(self.v_bias,shape=(1,-1))
 
-            nonzero_predicted_R = tf.gather_nd(self.predicted_R, self.row_col_ids)
-            nonzero_target = tf.gather_nd(self.target, self.row_col_ids)
+            predicted_values = tf.reshape(tf.gather_nd(self.predicted_R, self.row_col_ids),shape=(-1,))
 
-            self.loss = tf.reduce_mean(tf.squared_difference(nonzero_predicted_R, nonzero_target))
+            # nonzero_predicted_R = tf.gather_nd(self.predicted_R, self.row_col_ids)
+            # nonzero_target = tf.gather_nd(self.target, self.row_col_ids)
+
+            self.loss = tf.losses.mean_squared_error(labels=self.target,predictions=predicted_values) #tf.reduce_mean(tf.squared_difference(nonzero_predicted_R, nonzero_target))
 
         with tf.variable_scope('build_eval'):
             cond_k = tf.cond(self.topk <= tf.shape(self.predicted_R)[-1],lambda: self.topk, lambda: tf.shape(self.predicted_R)[-1])
@@ -164,45 +147,46 @@ class RecommendNet:
         with tf.variable_scope('build_optimizer'):
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
             with tf.control_dependencies(update_ops):
-                self.train_op = tf.train.RMSPropOptimizer(self.lr).minimize(self.loss)
+                self.train_op = tf.train.AdamOptimizer(self.lr).minimize(self.loss)
 
         if build_session:
             self.sess, self.saver = self.__build_session()
 
     def __check_correct_data(self, datas, mode):
-        assert isinstance(datas, TrainBatchSample) or isinstance(datas,EvalBatchSample)
+        #assert isinstance(datas, TrainBatchSample) or isinstance(datas,EvalBatchSample)
         assert mode in [self.train_signal, self.inf_signal]
 
     def create_input(self, datas, mode='training',**kargs):
         self.__check_correct_data(datas,mode)
 
         def create_train_input(datas,**kargs):
-            assert isinstance(datas, TrainBatchSample)
-
             feed_dict = {
-                self.u_pref: self.np_u_pref_scaled[datas.u_pref_row_ids, :],
-                self.v_pref: self.np_v_pref_scaled[datas.v_pref_row_ids, :],
-                self.u_content: self.np_u_cont[datas.u_content_row_ids],
-                self.v_content: self.np_v_cont[datas.v_content_row_ids],
-                self.target: datas.target,
+                self.u_pref: datas['u_pref'],
+                self.v_pref: datas['v_pref'],
+                self.u_content: datas['u_cont'],
+                self.v_content: datas['v_cont'],
+                self.u_bias: datas['u_bias'],
+                self.v_bias: datas['v_bias'],
+                self.target: datas['target'],
                 self.lr: kargs['lr'] if 'lr' in kargs else self.default_lr,
-                self.row_col_ids: datas.row_col_ids,
+                self.row_col_ids: datas['row_col_ids'],
                 self.phase: 1 if self.do_batch_norm else 0
             }
 
             return feed_dict
 
         def create_eval_input(datas,**kargs):
-            assert isinstance(datas, EvalBatchSample)
-            assert 'batch_id' in kargs
+            #assert 'batch_id' in kargs
 
-            ips = datas.get_batch(kargs['batch_id'])
+            #ips = datas.get_batch(kargs['batch_id'])
 
             feed_dict = {
-                self.u_pref: ips['u_pref'],
-                self.v_pref: ips['v_pref'],
-                self.u_content: ips['u_cont'],
-                self.v_content: ips['v_cont'],
+                self.u_pref: datas['u_pref'],
+                self.v_pref: datas['v_pref'],
+                self.u_content: datas['u_cont'],
+                self.v_content: datas['v_cont'],
+                self.u_bias: datas['u_bias'],
+                self.v_bias: datas['v_bias'],
                 self.phase: 0
             }
 
@@ -219,7 +203,7 @@ class RecommendNet:
         self.saver.restore(self.sess,path)
 
     def run(self, datas, mode='training',**kargs):
-        self.__check_correct_data(datas, mode)
+        #self.__check_correct_data(datas, mode)
 
         ip_feed_dict = self.create_input(datas,mode, **kargs)
 

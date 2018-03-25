@@ -7,6 +7,8 @@ from scipy.sparse import csr_matrix
 from lightfm import LightFM
 import cPickle
 
+from lightfm.evaluation import recall_at_k
+
 rating_path = './../metadata/rating_matrix.csv'
 lightfm_path = './lightfm.pkl'
 U_path = './U.csv.bin'
@@ -30,8 +32,29 @@ def main():
     model.user_biases.reshape((-1,1)).astype('float32').tofile(open(U_bias_path, 'w'))
     model.item_biases.reshape((1,-1)).astype('float32').tofile(open(V_bias_path, 'w'))
 
+def test(train_matrix_path, test_matrix_path):
+    train_rating_df = pd.read_csv(train_matrix_path,sep=',')
+    train_row, train_col, train_ratings = train_rating_df['profile'].values, train_rating_df['item'].values, \
+                                          train_rating_df['rating'].values
+
+    n_user = np.max(train_row) + 1
+    n_item = np.max(train_col) + 1
+
+    train_data = csr_matrix((train_ratings, (train_row, train_col)), shape=(n_user, n_item))
+    model = LightFM(loss='warp', no_components=200, item_alpha=0.001, user_alpha=0.001)
+    model.fit(train_data, epochs=200, num_threads=1)
+
+    test_rating_df = pd.read_csv(test_matrix_path,sep=',',names=['profile','item','rating'])
+    test_row, test_col, test_ratings = test_rating_df['profile'].values, test_rating_df['item'].values, \
+                                       test_rating_df['rating'].values
+
+    test_data = csr_matrix((test_ratings,(test_row, test_col)),shape=(n_user, n_item))
+    print("Train precision: %.2f" % recall_at_k(model, train_data, k=3).mean())
+    print("Test precision: %.2f" % recall_at_k(model, test_data, k=3).mean())
+
 if __name__ == '__main__':
-    main()
+    #main()
+    test(train_matrix_path=rating_path,test_matrix_path='./../split/test_warm.csv')
     # rating_path = './../metadata/rating_matrix.csv'
     #
     # rating_datas  = pd.read_csv(rating_path,sep=',')
