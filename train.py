@@ -36,8 +36,11 @@ def main(test_cold_user_path, test_cold_item_path, test_warm_path, train_path, u
     v_content_matrix = load_ndarray_data(data_path=v_content_path, type='bin').reshape(n_items,200)
 
     # normalize
-    u_pref_scaler, u_pref_scaled_matrix = normalize_matrix(u_pref_matrix)
-    v_pref_scaler, v_pref_scaled_matrix = normalize_matrix(v_pref_matrix)
+    # u_pref_scaler, u_pref_scaled_matrix = normalize_matrix(u_pref_matrix)
+    # v_pref_scaler, v_pref_scaled_matrix = normalize_matrix(v_pref_matrix)
+
+    u_pref_scaled_matrix = u_pref_matrix
+    v_pref_scaled_matrix = v_pref_matrix
 
     # adding zero for dropout purpose
     u_pref_scaled_matrix = np.vstack([u_pref_scaled_matrix, np.zeros_like(u_pref_scaled_matrix[0,:])])
@@ -61,20 +64,21 @@ def main(test_cold_user_path, test_cold_item_path, test_warm_path, train_path, u
     # create train and eval batchs
     train_batchs = create_train_batchs(R=train_matrix, batch_size=batch_size)
 
-    test_cold_user_batchs = create_eval_batchs(R=test_cold_user_matrix,batch_size=batch_size,u_pref=u_pref_scaled_matrix,
-                                               v_pref=v_pref_scaled_matrix,u_cont=u_content_matrix,v_cont=v_content_matrix)
+    # test_cold_user_batchs = create_eval_batchs(R=test_cold_user_matrix,batch_size=batch_size,u_pref=u_pref_scaled_matrix,
+    #                                            v_pref=v_pref_scaled_matrix,u_cont=u_content_matrix,v_cont=v_content_matrix)
 
     # test_cold_item_batchs = create_eval_batchs(R=test_cold_item_matrix,batch_size=batch_size,u_pref=u_pref_scaled_matrix,
     #                                            v_pref=v_pref_scaled_matrix,u_cont=u_content_matrix,v_cont=v_content_matrix)
 
     test_warm_batchs = create_eval_batchs(R=test_warm_matrix,batch_size=batch_size,u_pref=u_pref_scaled_matrix,
-                                               v_pref=v_pref_scaled_matrix,u_cont=u_content_matrix,v_cont=v_content_matrix)
+                                               v_pref=v_pref_scaled_matrix,u_cont=u_content_matrix,v_cont=v_content_matrix,
+                                          u_bias=u_bias_matrix, v_bias=v_bias_matrix)
 
     # model
     model = NN(latent_dim=200,user_feature_dim=200,item_feature_dim=200,out_dim=200,default_lr=learning_rate,
                k=topk, np_u_pref_scaled=u_pref_scaled_matrix,np_v_pref_scaled=v_pref_scaled_matrix,
-               np_u_cont=u_content_matrix,np_v_cont=v_content_matrix)
-    model.build()
+               np_u_cont=u_content_matrix,np_v_cont=v_content_matrix,np_u_bias=u_bias_matrix,np_v_bias=v_bias_matrix,do_batch_norm=True)
+    #model.build()
 
     # # save params
     # params = {
@@ -97,7 +101,7 @@ def main(test_cold_user_path, test_cold_item_path, test_warm_path, train_path, u
     # with open(saved_model + '/params.pkl', 'w') as f:
     #     cPickle.dump(params, f)
 
-    cPickle.dump(model, open('./saved_model/model.pkl'))
+    #cPickle.dump(model, open('./saved_model/model.pkl'))
     model.build()
 
     # train
@@ -124,7 +128,7 @@ def main(test_cold_user_path, test_cold_item_path, test_warm_path, train_path, u
             # dropout or not
             if dropout != 0:
                 batch.dropout_user(dropout_prob = dropout, zero_id = zero_user_id)
-                batch.dropout_item(dropout_prob = dropout, zero_id = zero_item_id)
+                #batch.dropout_item(dropout_prob = dropout, zero_id = zero_item_id)
 
             train_loss, _ = model.run(datas=batch, mode=model.train_signal, lr = learning_rate)
             train_loss_total.append(train_loss)
@@ -138,7 +142,7 @@ def main(test_cold_user_path, test_cold_item_path, test_warm_path, train_path, u
                 learning_rate = lr_decay * learning_rate
 
             if n_step % freq_eval == 0:
-                cu_acc_mean = score_eval_batch(datas=test_cold_user_batchs, model=model)
+                cu_acc_mean = 1.0 #score_eval_batch(datas=test_cold_user_batchs, model=model)
                 ci_acc_mean = 1.0 #score_eval_batch_map(datas=test_cold_item_batchs, model=model, topks=topks)
                 w_acc_mean  = score_eval_batch(datas=test_warm_batchs, model=model)
 
@@ -152,11 +156,11 @@ def main(test_cold_user_path, test_cold_item_path, test_warm_path, train_path, u
                     status = 'best'
 
                     # save model
-                    model.save(params['tf_model_path'])
-                    info = get_score_information(lst_best_scores=[best_cu_score,best_ci_score,best_w_score],
-                                                 lst_best_score_names=['cold_user score', 'cold_item score', 'warm score'],
-                                                 dataset_path=train_path)
-                    with open(params['info_path'],'w') as f: f.write(info)
+                    #model.save(params['tf_model_path'])
+                    # info = get_score_information(lst_best_scores=[best_cu_score,best_ci_score,best_w_score],
+                    #                              lst_best_score_names=['cold_user score', 'cold_item score', 'warm score'],
+                    #                              dataset_path=train_path)
+                    # with open(params['info_path'],'w') as f: f.write(info)
 
                 tabl.add_row([status,epoch_i + 1, batch_i + 1, "%.3f" % cu_acc_mean, "%.3f" % ci_acc_mean, "%.3f" % w_acc_mean,
                               "%.4f" % (cu_acc_mean + w_acc_mean + ci_acc_mean)])
@@ -180,8 +184,8 @@ if __name__ == '__main__':
         'v_content_path': sub_path + '/vect/deep/item.csv.bin',
         'saved_model': './saved_model/dropoutnet_opla_vTest',
         'batch_size': 100,
-        'n_epoch': 50,
-        'dropout': 0.3,
+        'n_epoch': 30,
+        'dropout': 0.0,
         'learning_rate': 0.005,
         'n_items_per_user': 8,
         'topk' : 5

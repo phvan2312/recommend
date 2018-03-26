@@ -10,7 +10,7 @@ sS'item_feature_dim'
 p5
 I200
 sS'k'
-I3
+I5
 sS'latent_dim'
 p6
 I200

@@ -4,7 +4,7 @@ from sklearn import datasets
 from sklearn.preprocessing import StandardScaler
 from batch import TrainBatchSample, EvalBatchSample
 #from pymf.nmf import NMF
-
+import scipy
 
 def get_top_k(matrix,k):
     """
@@ -152,9 +152,9 @@ def data_augment(R,n_items_per_user,batch_size,u_pref,v_pref,u_bias,v_bias):
 
     return pd.DataFrame(new_R, columns=['uid', 'iid', 'rating']).as_matrix()
 
-def create_eval_batchs(R, batch_size, u_pref, v_pref, u_cont, v_cont):
+def create_eval_batchs(R, batch_size, u_pref, v_pref, u_cont, v_cont,u_bias,v_bias):
     eval_batch = EvalBatchSample(user_ids=R[:,0],item_ids=R[:,1],ratings=R[:,2],batch_size=batch_size, u_pref=u_pref,
-                                 v_pref=v_pref,u_cont=u_cont,v_cont=v_cont)
+                                 v_pref=v_pref,u_cont=u_cont,v_cont=v_cont,u_bias=u_bias,v_bias=v_bias)
     return eval_batch
 
 def create_train_batchs(R, batch_size, shuffle=False):

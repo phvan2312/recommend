@@ -149,7 +149,7 @@ def main(test_cold_user_path, test_cold_item_path, test_warm_path, train_path, u
 def main_v2(u_preference_path, v_preference_path, u_bias_path, v_bias_path, u_content_path,
             v_content_path, train_path, test_warm_path, n_items_per_user, batch_size, n_epoch, learning_rate, **kargs):
 
-    topk = 3
+    topk = 5
 
     u_pref_matrix = load_ndarray_data(data_path=u_preference_path, type='bin').reshape(n_users, 200)
     v_pref_matrix = load_ndarray_data(data_path=v_preference_path, type='bin').reshape(n_items, 200)
@@ -161,18 +161,22 @@ def main_v2(u_preference_path, v_preference_path, u_bias_path, v_bias_path, u_co
 
     train_data_df = pd.read_csv(train_path, sep=',',names=['profile','item','rating'])
     test_warm_data_df = pd.read_csv(test_warm_path, sep=',',names=['profile','item','rating'])
-    test_warm_matrix  = test_warm_data_df.as_matrix()
+    test_warm_matrix  = test_warm_data_df.as_matrix() #test_warm_data_df.as_matrix()
 
     # test_row, test_col, test_rating = test_warm_data_df['profile'].values, test_warm_data_df['item'].values, \
     #                                   test_warm_data_df['rating'].values
     # test_warm_matrix = csr_matrix((test_rating,(test_row, test_col)),shape=(n_users, n_items)).toarray()
 
-    train_matrix = data_augment_v2(R=train_data_df,n_items_per_user=n_items_per_user,batch_size=batch_size)
+    #train_matrix = data_augment_v2(R=train_data_df,n_items_per_user=n_items_per_user,batch_size=batch_size)
+    train_matrix = data_augment(R=train_data_df.as_matrix(),n_items_per_user=n_items_per_user,batch_size=batch_size,
+                                u_pref=u_pref_matrix,v_pref=v_pref_matrix,u_bias=u_bias_matrix,v_bias=v_bias_matrix)
+
     n_step = 0
     freq_eval = 20
     best_cu_score, best_ci_score, best_w_score = -np.inf, -np.inf, -np.inf
     decay_lr_every = 100
     lr_decay = 0.95
+    count = 0
 
     n_samples = train_matrix.shape[0]
     batch_se = [(s,min(n_samples,s + batch_size)) for s in range(0,n_samples,batch_size)]
@@ -186,10 +190,11 @@ def main_v2(u_preference_path, v_preference_path, u_bias_path, v_bias_path, u_co
         all_loss = []
 
         for (s,e) in np.random.permutation(batch_se):
+            count += 1
             train_batch = train_matrix[s:e,:]
 
             set_user = np.unique(train_batch[:,0])
-            user2id = OrderedDict([(v,k) for k,v in enumerate(set_user)])
+            user2id = OrderedDict([(int(v),k) for k,v in enumerate(set_user)])
 
             row_col_ids = np.array([(user2id[r], c) for r,c in zip(train_batch[:,0],train_batch[:,1])])
 
@@ -208,12 +213,15 @@ def main_v2(u_preference_path, v_preference_path, u_bias_path, v_bias_path, u_co
             loss, _ = model.run(datas=datas,mode=model.train_signal)
             all_loss += [loss]
 
-        print ('train loss:' , np.mean(all_loss))
+            if count % 20 == 0:
+                pass
+
         # calculate test score
         set_user = np.unique(test_warm_matrix[:, 0])
         user2id = OrderedDict([(v, k) for k, v in enumerate(set_user)])
 
-        row_col_ids = np.array([(user2id[r], c) for r, c in zip(test_warm_matrix[:, 0], test_warm_matrix[:, 1])])
+        row_col_ids = np.array(
+            [(user2id[r], c) for r, c in zip(test_warm_matrix[:, 0], test_warm_matrix[:, 1])])
 
         # create datas
         datas = {
@@ -229,7 +237,8 @@ def main_v2(u_preference_path, v_preference_path, u_bias_path, v_bias_path, u_co
                             shape=(np.max(set_user) + 1, n_items)).toarray()
         tf_eval_preds_batch, _ = model.run(datas=datas, mode=model.inf_signal)
 
-        print ('test recall score: ', score(target=target, tf_eval_preds_batch=tf_eval_preds_batch))
+        print ('-- test recall score: ', score(target=target, tf_eval_preds_batch=tf_eval_preds_batch))
+        print ('train loss:' , np.mean(all_loss))
 
 
 def score(target,tf_eval_preds_batch):
@@ -264,7 +273,7 @@ if __name__ == '__main__':
         'v_content_path': sub_path + '/vect/deep/item.csv.bin',
         'saved_model': './saved_model/dropoutnet_opla_vTest',
         'batch_size': 100,
-        'n_epoch': 30,
+        'n_epoch': 20,
         'dropout': 0.3,
         'learning_rate': 0.002,
         'n_items_per_user': 8,

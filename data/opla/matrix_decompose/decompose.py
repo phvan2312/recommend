@@ -9,7 +9,7 @@ import cPickle
 
 from lightfm.evaluation import recall_at_k
 
-rating_path = './../metadata/rating_matrix.csv'
+rating_path = './../split/train.csv'#'./../metadata/rating_matrix.csv'
 lightfm_path = './lightfm.pkl'
 U_path = './U.csv.bin'
 V_path = './V.csv.bin'
@@ -17,7 +17,7 @@ U_bias_path = './U_bias.csv.bin'
 V_bias_path = './V_bias.csv.bin'
 
 def main():
-    rating_df = pd.read_csv(rating_path,sep=',')
+    rating_df = pd.read_csv(rating_path,sep=',',names=['profile','item','rating'])
 
     row, col, ratings = rating_df['profile'].values, rating_df['item'].values, rating_df['rating'].values
     n_user = np.max(row) + 1
@@ -30,10 +30,10 @@ def main():
     model.user_embeddings.astype('float32').tofile(open(U_path, 'w'))
     model.item_embeddings.astype('float32').tofile(open(V_path, 'w'))
     model.user_biases.reshape((-1,1)).astype('float32').tofile(open(U_bias_path, 'w'))
-    model.item_biases.reshape((1,-1)).astype('float32').tofile(open(V_bias_path, 'w'))
+    model.item_biases.reshape((-1,1)).astype('float32').tofile(open(V_bias_path, 'w'))
 
 def test(train_matrix_path, test_matrix_path):
-    train_rating_df = pd.read_csv(train_matrix_path,sep=',')
+    train_rating_df = pd.read_csv(train_matrix_path,sep=',',names=['profile','item','rating'])
     train_row, train_col, train_ratings = train_rating_df['profile'].values, train_rating_df['item'].values, \
                                           train_rating_df['rating'].values
 
@@ -49,12 +49,13 @@ def test(train_matrix_path, test_matrix_path):
                                        test_rating_df['rating'].values
 
     test_data = csr_matrix((test_ratings,(test_row, test_col)),shape=(n_user, n_item))
-    print("Train precision: %.2f" % recall_at_k(model, train_data, k=3).mean())
-    print("Test precision: %.2f" % recall_at_k(model, test_data, k=3).mean())
+    print("Train precision: %.5f" % recall_at_k(model, train_data, k=5).mean())
+    print("Test precision: %.5f" % recall_at_k(model, test_data, k=5).mean())
 
 if __name__ == '__main__':
     #main()
-    test(train_matrix_path=rating_path,test_matrix_path='./../split/test_warm.csv')
+    test(train_matrix_path='./../split/train.csv',test_matrix_path='./../split/test_warm.csv')
+
     # rating_path = './../metadata/rating_matrix.csv'
     #
     # rating_datas  = pd.read_csv(rating_path,sep=',')

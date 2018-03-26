@@ -7,7 +7,7 @@ from batch import TrainBatchSample, EvalBatchSample
 class RecommendNet:
     def __init__(self, latent_dim, user_feature_dim, item_feature_dim, out_dim, multilayer_dims = [400], do_batch_norm = True,
                  default_lr = 0.005, k = 50,
-                 np_u_pref_scaled = None, np_v_pref_scaled = None, np_u_cont = None, np_v_cont = None, **kargs):
+                 np_u_pref_scaled = None, np_v_pref_scaled = None, np_u_cont = None, np_v_cont = None, np_u_bias = None, np_v_bias = None, **kargs):
 
         self.latent_dim = latent_dim
         self.user_feature_dim = user_feature_dim
@@ -21,6 +21,9 @@ class RecommendNet:
         self.np_v_pref_scaled = np_v_pref_scaled
         self.np_u_cont = np_u_cont
         self.np_v_cont = np_v_cont
+        self.np_u_bias = np_u_bias
+        self.np_v_bias = np_v_bias
+
 
         self.k = k
         self.default_lr = default_lr
@@ -92,12 +95,17 @@ class RecommendNet:
         self.u_content = tf.placeholder(dtype=tf.float32, shape=[None,self.user_feature_dim], name='u_content') # (n_users, user_feature_dim)
         self.v_content = tf.placeholder(dtype=tf.float32, shape=[None,self.item_feature_dim],name='v_content') # (n_items, item_feature_dim)
 
-        if self.do_batch_norm: self.phase = tf.placeholder(tf.bool, name='phase')
+        self.u_bias = tf.placeholder(dtype=tf.float32, shape=[None, 1], name='u_bias')  # n_user,
+        self.v_bias = tf.placeholder(dtype=tf.float32, shape=[None, 1], name='v_bias')  # n_item,
+
+        self.phase = tf.placeholder(tf.bool, name='phase')
 
         self.topk = tf.placeholder_with_default(input=self.k,shape=[],name='topk')
         self.target = tf.placeholder(dtype=tf.float32, shape=[None, None], name='target')
         self.row_col_ids = tf.placeholder(dtype=tf.int32, shape=[None, None], name='row_col_ids')
         self.lr = tf.placeholder(dtype=tf.float32,shape=[],name='lr')
+
+        self.dropout = tf.placeholder_with_default(1.0,shape=(),name='dropout')
 
     def __build_session(self):
         config = tf.ConfigProto()
@@ -135,14 +143,15 @@ class RecommendNet:
 
         with tf.variable_scope('build_fully_connected'):
             with tf.variable_scope('user'):
-                self.u_hat = self.__build_fully_connected(data=self.last_u,dim_in=last_u_dim,dim_out=self.out_dim)
+                self.u_hat = self.__build_fully_connected(data=tf.nn.dropout(self.last_u,self.dropout),dim_in=last_u_dim,dim_out=self.out_dim)
 
             with tf.variable_scope('item'):
-                self.v_hat = self.__build_fully_connected(data=self.last_v,dim_in=last_v_dim,dim_out=self.out_dim)
+                self.v_hat = self.__build_fully_connected(data=tf.nn.dropout(self.last_v,self.dropout),dim_in=last_v_dim,dim_out=self.out_dim)
 
 
         with tf.variable_scope('build_loss'):
-            self.predicted_R = tf.matmul(self.u_hat,self.v_hat,transpose_b=True,name='predicted_R')
+            self.predicted_R = tf.matmul(self.u_hat,self.v_hat,transpose_b=True,name='predicted_R') \
+                               + tf.reshape(self.u_bias,shape=(-1,1)) + tf.reshape(self.v_bias,shape=(1,-1))
 
             nonzero_predicted_R = tf.gather_nd(self.predicted_R, self.row_col_ids)
             nonzero_target = tf.gather_nd(self.target, self.row_col_ids)
@@ -184,10 +193,12 @@ class RecommendNet:
                 self.v_pref: self.np_v_pref_scaled[datas.v_pref_row_ids, :],
                 self.u_content: self.np_u_cont[datas.u_content_row_ids],
                 self.v_content: self.np_v_cont[datas.v_content_row_ids],
+                self.u_bias: self.np_u_bias[datas.u_bias_row_ids, :],
+                self.v_bias: self.np_v_bias[datas.v_bias_row_ids, :],
                 self.target: datas.target,
                 self.lr: kargs['lr'] if 'lr' in kargs else self.default_lr,
                 self.row_col_ids: datas.row_col_ids,
-                self.phase: 1 if self.do_batch_norm else 0
+                self.phase: 1 if self.do_batch_norm else 0,
             }
 
             return feed_dict
@@ -201,9 +212,12 @@ class RecommendNet:
             feed_dict = {
                 self.u_pref: ips['u_pref'],
                 self.v_pref: ips['v_pref'],
+                self.u_bias: ips['u_bias'],
+                self.v_bias: ips['v_bias'],
                 self.u_content: ips['u_cont'],
                 self.v_content: ips['v_cont'],
-                self.phase: 0
+                self.phase: 0,
+                self.dropout: 1.0
             }
 
             return feed_dict
