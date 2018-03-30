@@ -7,9 +7,9 @@ from scipy.sparse import csr_matrix
 from lightfm import LightFM
 import cPickle
 
-from lightfm.evaluation import recall_at_k
+from lightfm.evaluation import recall_at_k, precision_at_k
 
-rating_path = './../split/train.csv'#'./../metadata/rating_matrix.csv'
+rating_path = './../../movielen1m/data/train.csv' #'./../split/train.csv'#'./../metadata/rating_matrix.csv'
 lightfm_path = './lightfm.pkl'
 U_path = './U.csv.bin'
 V_path = './V.csv.bin'
@@ -25,7 +25,12 @@ def main():
 
     train_data = csr_matrix((ratings, (row, col)), shape=(n_user, n_item))
     model = LightFM(loss='warp',no_components=200,item_alpha=0.001,user_alpha=0.001)
-    model.fit(train_data, epochs=200, num_threads=2)
+    model.fit(train_data, epochs=20, num_threads=30)
+
+    print model.user_embeddings.shape
+    print model.item_embeddings.shape
+    print model.user_biases.shape
+    print model.item_biases.shape
 
     model.user_embeddings.astype('float32').tofile(open(U_path, 'w'))
     model.item_embeddings.astype('float32').tofile(open(V_path, 'w'))
@@ -42,19 +47,22 @@ def test(train_matrix_path, test_matrix_path):
 
     train_data = csr_matrix((train_ratings, (train_row, train_col)), shape=(n_user, n_item))
     model = LightFM(loss='warp', no_components=200, item_alpha=0.001, user_alpha=0.001)
-    model.fit(train_data, epochs=200, num_threads=1)
+    model.fit(train_data, epochs=20, num_threads=30)
 
     test_rating_df = pd.read_csv(test_matrix_path,sep=',',names=['profile','item','rating'])
     test_row, test_col, test_ratings = test_rating_df['profile'].values, test_rating_df['item'].values, \
                                        test_rating_df['rating'].values
 
     test_data = csr_matrix((test_ratings,(test_row, test_col)),shape=(n_user, n_item))
-    print("Train precision: %.5f" % recall_at_k(model, train_data, k=5).mean())
-    print("Test precision: %.5f" % recall_at_k(model, test_data, k=5).mean())
+    print("Train precision: %.5f" % recall_at_k(model, train_data, k=10,num_threads=30).mean())
+    print("Test precision: %.5f" % recall_at_k(model, test_data, k=10,num_threads=30).mean())
+
+    # print("Train precision: %.5f" % precision_at_k(model, train_data, k=10).mean())
+    # print("Test precision: %.5f" % precision_at_k(model, test_data, k=10).mean())
 
 if __name__ == '__main__':
     #main()
-    test(train_matrix_path='./../split/train.csv',test_matrix_path='./../split/test_warm.csv')
+    test(train_matrix_path='./../../movielen1m/data/train.csv',test_matrix_path='./../../movielen1m/data/test_warm.csv')
 
     # rating_path = './../metadata/rating_matrix.csv'
     #

@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.datasets import dump_svmlight_file
-from utils import extract_cold_item_from_R, extract_cold_user_from_R, extract_warm_from_R, matrix_decomposite
+#from utils import extract_cold_item_from_R, extract_cold_user_from_R, extract_warm_from_R, matrix_decomposite
 
 def build_one_hot(datas):
     """
@@ -98,9 +98,6 @@ if __name__ == '__main__':
     item_content_vectors = full_item_content_vectors
 
     _, user_content_vectors = build_one_hot(train_user_datas)
-
-    # save file
-
 
     # U,V content matrix
     dump_libsvm(vectors=user_content_vectors, path='./split_data/user_features_0based.txt')

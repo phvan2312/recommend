@@ -7,7 +7,7 @@ from batch import TrainBatchSample, EvalBatchSample
 class RecommendNet:
     def __init__(self, latent_dim, user_feature_dim, item_feature_dim, out_dim, multilayer_dims = [400], do_batch_norm = True,
                  default_lr = 0.005, k = 50,
-                 np_u_pref_scaled = None, np_v_pref_scaled = None, np_u_cont = None, np_v_cont = None, np_u_bias = None, np_v_bias = None, **kargs):
+                 np_u_pref_zero = None, np_v_pref_zero = None, np_u_cont = None, np_v_cont = None, np_u_bias_zero = None, np_v_bias_zero = None, **kargs):
 
         self.latent_dim = latent_dim
         self.user_feature_dim = user_feature_dim
@@ -17,35 +17,17 @@ class RecommendNet:
         self.multilayer_dims = multilayer_dims
         self.do_batch_norm = do_batch_norm
 
-        self.np_u_pref_scaled = np_u_pref_scaled
-        self.np_v_pref_scaled = np_v_pref_scaled
-        self.np_u_cont = np_u_cont
-        self.np_v_cont = np_v_cont
-        self.np_u_bias = np_u_bias
-        self.np_v_bias = np_v_bias
-
-
         self.k = k
         self.default_lr = default_lr
         self.train_signal, self.inf_signal = 'training', 'inference'
 
-    def get_params(self):
-        params = {
-            'latent_dim' : self.latent_dim,
-            'user_feature_dim' : self.user_feature_dim,
-            'item_feature_dim' : self.item_feature_dim,
-            'out_dim' : self.out_dim,
-            'multilayer_dims' : self.multilayer_dims,
-            'do_batch_norm' : self.do_batch_norm,
-            'default_lr' : self.default_lr,
-            'k' : self.k,
-            'np_u_pref_scaled' : None,
-            'np_v_pref_scaled' : None,
-            'np_u_cont' : None,
-            'np_v_cont' : None
-        }
-
-        return params
+    def set_np_matrix(self, np_u_pref_zero, np_v_pref_zero, np_u_cont, np_v_cont, np_u_bias_zero, np_v_bias_zero):
+        self.np_u_pref_zero = np_u_pref_zero
+        self.np_v_pref_zero = np_v_pref_zero
+        self.np_u_cont = np_u_cont
+        self.np_v_cont = np_v_cont
+        self.np_u_bias_zero = np_u_bias_zero
+        self.np_v_bias_zero = np_v_bias_zero
 
     def batch_normalize(self, data, scope, phase):
         assert hasattr(self,'phase')
@@ -189,12 +171,12 @@ class RecommendNet:
             assert isinstance(datas, TrainBatchSample)
 
             feed_dict = {
-                self.u_pref: self.np_u_pref_scaled[datas.u_pref_row_ids, :],
-                self.v_pref: self.np_v_pref_scaled[datas.v_pref_row_ids, :],
+                self.u_pref: self.np_u_pref_zero[datas.u_pref_row_ids, :],
+                self.v_pref: self.np_v_pref_zero[datas.v_pref_row_ids, :],
                 self.u_content: self.np_u_cont[datas.u_content_row_ids],
                 self.v_content: self.np_v_cont[datas.v_content_row_ids],
-                self.u_bias: self.np_u_bias[datas.u_bias_row_ids, :],
-                self.v_bias: self.np_v_bias[datas.v_bias_row_ids, :],
+                self.u_bias: self.np_u_bias_zero[datas.u_pref_row_ids, :],
+                self.v_bias: self.np_v_bias_zero[datas.v_pref_row_ids, :],
                 self.target: datas.target,
                 self.lr: kargs['lr'] if 'lr' in kargs else self.default_lr,
                 self.row_col_ids: datas.row_col_ids,
@@ -207,7 +189,8 @@ class RecommendNet:
             assert isinstance(datas, EvalBatchSample)
             assert 'batch_id' in kargs
 
-            ips = datas.get_batch(kargs['batch_id'])
+            ips = datas.get_batch(kargs['batch_id'], u_pref=self.np_u_pref_zero, v_pref=self.np_v_pref_zero,
+                                  u_cont=self.np_u_cont, v_cont=self.np_v_cont, u_bias=self.np_u_bias_zero, v_bias=self.np_v_bias_zero)
 
             feed_dict = {
                 self.u_pref: ips['u_pref'],

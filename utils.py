@@ -5,6 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from batch import TrainBatchSample, EvalBatchSample
 #from pymf.nmf import NMF
 import scipy
+from sklearn.utils import shuffle
 
 def get_top_k(matrix,k):
     """
@@ -74,7 +75,7 @@ def data_augment_v2(R,n_items_per_user,batch_size):
         new_R['uid'].extend(fn_u_ids)
         new_R['rating'].extend(fn_ratings)
 
-    return pd.DataFrame(new_R, columns=['uid', 'iid', 'rating']).as_matrix()
+    return shuffle(pd.DataFrame(new_R, columns=['uid', 'iid', 'rating']).as_matrix())
 
     # new_R = {
     #     'uid'  : [],
@@ -123,12 +124,12 @@ def data_augment(R,n_items_per_user,batch_size,u_pref,v_pref,u_bias,v_bias):
     assert n_items_per_user < v_pref.shape[0]
 
     new_R = {
-        'uid'  : [],
-        'iid'  : [],
+        'profile'  : [],
+        'item'  : [],
         'rating':[]
     }
 
-    unique_user_ids = np.unique(R[:,0])
+    unique_user_ids = np.unique(R['profile'].values)
     n_user = len(unique_user_ids)
 
     user_batch_sizes = [(s,min(s + batch_size, n_user)) for s in range(0,n_user,batch_size)]
@@ -146,33 +147,41 @@ def data_augment(R,n_items_per_user,batch_size,u_pref,v_pref,u_bias,v_bias):
         fn_u_ids   = np.append(topk_u_ids, rand_u_ids)
         fn_i_ids   = np.append(topk_i_ids, rand_i_ids)
 
-        new_R['iid'].extend(fn_i_ids)
-        new_R['uid'].extend(fn_u_ids)
+        new_R['profile'].extend(fn_u_ids)
+        new_R['item'].extend(fn_i_ids)
         new_R['rating'].extend(fn_ratings)
 
-    return pd.DataFrame(new_R, columns=['uid', 'iid', 'rating']).as_matrix()
+    return shuffle(pd.DataFrame(new_R, columns=['profile', 'item', 'rating']))
 
-def create_eval_batchs(R, batch_size, u_pref, v_pref, u_cont, v_cont,u_bias,v_bias):
-    eval_batch = EvalBatchSample(user_ids=R[:,0],item_ids=R[:,1],ratings=R[:,2],batch_size=batch_size, u_pref=u_pref,
-                                 v_pref=v_pref,u_cont=u_cont,v_cont=v_cont,u_bias=u_bias,v_bias=v_bias)
+def create_eval_batchs(R, batch_size, **kargs):
+    """
+    We do not split data into several batchs here. Because if we do that, accuracy that we gather from all
+    of its mini batchs we will have some error .
+
+    :param R:
+    :param batch_size:
+    :param kargs:
+    :return:
+    """
+    eval_batch = EvalBatchSample(user_ids=R['profile'].values,item_ids=R['item'].values,ratings=R['rating'].values,
+                                 batch_size=batch_size, **kargs)
     return eval_batch
 
-def create_train_batchs(R, batch_size, shuffle=False):
+def create_train_batchs(R, batch_size):
     """
-    :param R: rating matrix, ndarray type, with 3 columns <uid, iid, rating>
+    :param R: ratings
     :param batch_size: integer
     :return: list of batch
     """
+
     data_len = R.shape[0]
-
-    if shuffle: np.random.shuffle(R)
-
-    batch_sizes = [(batch_start,min(batch_start + batch_size, data_len)) for batch_start in range(0,data_len,batch_size)]
+    batch_sizes = [(s,min(s + batch_size, data_len)) for s in range(0,data_len,batch_size)]
     batchs = []
-    for (batch_start, batch_end) in batch_sizes:
-        user_ids = R[batch_start:batch_end, 0]
-        item_ids = R[batch_start:batch_end, 1]
-        ratings  = R[batch_start:batch_end, 2]
+
+    for (s, e) in batch_sizes:
+        user_ids = R['profile'].values[s:e]
+        item_ids = R['item'].values[s:e]
+        ratings  = R['rating'].values[s:e]
 
         batch = TrainBatchSample(user_ids=user_ids, item_ids=item_ids, ratings=ratings)
         batchs.append(batch)
@@ -222,26 +231,6 @@ def get_ids_rated_by_x(R,x_id,x_col_id):
     ids = np.where(R[:,x_col_id] == x_id)[0]
 
     return ids
-
-def matrix_decomposite(R,k=200,n_iter=200):
-    """
-    :param R: rating matrix
-    :param k: latent dim
-    :param n_iter: number of iterations for algorithm
-    :return: U,V
-    """
-    n_users = np.max(R[:,0]) + 1
-    n_items = np.max(R[:,1]) + 1
-
-    new_R = np.zeros(shape=(n_users,n_items),dtype='float32')
-    new_R[R[:,0].tolist(),R[:,1].tolist()] = R[:,2].astype('float32')
-
-    mdl = NMF(new_R,num_bases=k)
-    mdl.factorize(niter=n_iter)
-
-    U,V = mdl.W, mdl.H.T
-
-    return U,V
 
 def extract_warm_from_R(R,split_percent=0.1):
     """
@@ -345,6 +334,9 @@ def score_eval_batch_map(datas,model,topks):
     return np.mean(np.asarray(results))
 
 def score_eval_batch(datas,model):
+    """
+    It equals to recall_at_k in LightFM
+    """
     tf_eval_preds_batch = []
 
     for i in range(len(datas.eval_batchs)):
