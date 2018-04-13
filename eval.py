@@ -167,3 +167,4 @@ if __name__ == '__main__':
         recommend_items = '; '.join([eval_Rec.id2item[iid] for iid in top_iid])
         expected_items  = '; '.join(u_keys[u_name]) if u_name in u_keys else 'None'
         print "Recommend items: %s | Expected: %s for User: %s" % (recommend_items, expected_items, u_name)
+

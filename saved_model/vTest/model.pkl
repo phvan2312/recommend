@@ -8,9 +8,9 @@ S'inference'
 p4
 sS'item_feature_dim'
 p5
-I18
+I200
 sS'k'
-I10
+I6
 sS'latent_dim'
 p6
 I200
@@ -19,7 +19,7 @@ p7
 I01
 sS'default_lr'
 p8
-F0.0050000000000000001
+F0.001
 sS'train_signal'
 p9
 S'training'
@@ -29,7 +29,7 @@ p11
 I200
 sS'user_feature_dim'
 p12
-I30
+I200
 sS'multilayer_dims'
 p13
 (lp14

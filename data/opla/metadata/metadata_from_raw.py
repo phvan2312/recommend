@@ -206,7 +206,7 @@ if __name__ == '__main__':
 
     # # update
     # updated_data = json.load(open(raw_data_path, 'r'))
-    update(raw_data)
+    #update(raw_data)
 
 
 
