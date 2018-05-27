@@ -132,19 +132,19 @@ if __name__ == '__main__':
 
     params = {
         'params_path' : './saved_model/dropoutnet_opla_v1/params.pkl',
-        'profile_vocab_path': './data/opla/metadata/id2profile.csv',
-        'item_vocab_path': './data/opla/metadata/id2item.csv'
+        'profile_vocab_path': './fake_data/opla/metadata/id2profile.csv',
+        'item_vocab_path': './fake_data/opla/metadata/id2item.csv'
     }
 
     eval_Rec = EvalRecommendNet(**params)
 
-    vect = Vect(profile_vectorizer_path ='./data/opla/vect/profile_vectorizer.pkl',
-                profile_vocab_path = './data/opla/metadata/id2profile.csv')
+    vect = Vect(profile_vectorizer_path ='./fake_data/opla/vect/profile_vectorizer.pkl',
+                profile_vocab_path = './fake_data/opla/metadata/id2profile.csv')
 
     #
     # test with one json file
     #
-    json_data = json.load(open('./data/opla/raw/zipper-2018-01-23--08-01/acyras.json'))
+    json_data = json.load(open('./fake_data/opla/raw/zipper-2018-01-23--08-01/acyras.json'))
     u_keys, u_cont_matrix, u_ids, u_names = vect.convert_from_json(lst_json=[json_data])
 
     topk_iids = eval_Rec.predict_with_matrix(u_ids = u_ids, u_cont = u_cont_matrix, topk=5)
@@ -154,10 +154,10 @@ if __name__ == '__main__':
         print "Recommend items: %s for user: %s \n" % (recommend_items, u_name)
 
     #
-    # test with all data we have
+    # test with all fake_data we have
     #
 
-    merge_data_path = './data/opla/raw/data.json'
+    merge_data_path = './fake_data/opla/raw/fake_data.json'
     all_data = json.load(open(merge_data_path, 'r'))
     u_keys, u_cont_matrix, u_ids, u_names = vect.convert_from_json(lst_json=all_data.values())
 

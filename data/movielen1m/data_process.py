@@ -17,11 +17,11 @@ item_profiles_path = './movies.dat'
 n_users = 6040
 n_items = 3952
 
-user_feature_path = './data/user_feature.csv.bin'
-item_feature_path = './data/item_feature.csv.bin'
-cold_user_path = './data/test_cold_user.csv'
-warm_path = './data/test_warm.csv'
-train_path = './data/train.csv'
+user_feature_path = './fake_data/user_feature.csv.bin'
+item_feature_path = './fake_data/item_feature.csv.bin'
+cold_user_path = './fake_data/test_cold_user.csv'
+warm_path = './fake_data/test_warm.csv'
+train_path = './fake_data/train.csv'
 
 if __name__ == '__main__':
     ratings_df = pd.read_csv(ratings_path,sep='::',names=['uid','iid','rating','timestamp'])

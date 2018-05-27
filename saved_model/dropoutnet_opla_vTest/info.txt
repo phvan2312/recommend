@@ -1,4 +1,0 @@
-dataset train path: ./data/opla/split/train.csv
-cold_user score: 0.532
-cold_item score: 1.000
-warm score: 0.496

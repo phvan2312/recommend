@@ -155,7 +155,7 @@ def data_augment(R,n_items_per_user,batch_size,u_pref,v_pref,u_bias,v_bias):
 
 def create_eval_batchs(R, batch_size, **kargs):
     """
-    We do not split data into several batchs here. Because if we do that, accuracy that we gather from all
+    We do not split fake_data into several batchs here. Because if we do that, accuracy that we gather from all
     of its mini batchs we will have some error .
 
     :param R:
@@ -190,7 +190,7 @@ def create_train_batchs(R, batch_size):
 
 def load_ndarray_data(data_path, type='bin'):
     """
-    :param data_path: path to data
+    :param data_path: path to fake_data
     :param type: must be one of the following ['bin','svmlight','R']
     :return: ndarray
     """
@@ -212,9 +212,9 @@ def load_ndarray_data(data_path, type='bin'):
 
 def normalize_matrix(data,scaler_class = StandardScaler):
     """
-    :param data: data to be normalized
+    :param data: fake_data to be normalized
     :param scaler_class: default is StandardScaler
-    :return: <scaler, normalized data>
+    :return: <scaler, normalized fake_data>
     """
     scaler = scaler_class()
     scaler.fit(data)

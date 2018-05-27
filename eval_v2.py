@@ -5,7 +5,7 @@ from nn.nn_with_dropoutnet import RecommendNet
 import os
 from lightfm import LightFM
 from data.opla import opla_utils
-from data.opla.vect.deep.vectorizer import ItemVectorizerModel, extract_work_from_user, extract_skill_from_user
+from data.opla.vect.deep.vectorizer import VectorizerModel, extract_work_from_user, extract_skill_from_user
 
 import pandas as pd
 import json
@@ -43,7 +43,8 @@ class Vectorizer:
         return self.vect.get_item_vector(item_id=range(n_items))
 
 class OldModel:
-    def __init__(self, model_path, model_deep_path, profilevocab_path, itemvocab_path, vectorizer_class_path, vectorizer_deep_path):
+    def __init__(self, model_path, model_deep_path, profilevocab_path, itemvocab_path, vectorizer_class_path,
+                 vectorizer_deep_path, **kargs):
         assert os.path.exists(model_path)
         #assert os.path.exists(model_deep_path)
 
@@ -113,7 +114,7 @@ class OldModel:
                             ip_feed_dict)
         return topk_col_ids
 
-def my_eval(target_matrix, predict_matrix):
+def my_eval_metric(target_matrix, predict_matrix):
     target_nonzezo = [sum(x) > 0 for x in target_matrix]
     target_nonzero = np.arange(0,len(target_matrix))[target_nonzezo]
 
@@ -124,33 +125,42 @@ def my_eval(target_matrix, predict_matrix):
 
     return np.mean(np.sum(mul,axis=1) / np.sum(processed_target_matrix, axis=1))
 
-if __name__ == '__main__':
+import argparse
 
-    # test
-    old_params = {
-        'model_path': './saved_model/vTest/model.pkl', # model_class_path ()
-        'model_deep_path': './saved_model/vTest/model.ckpt', # load values of matrix tensorflow
-        'profilevocab_path': './data/opla/metadata/id2profile.csv', # id_profile df
-        'itemvocab_path': './data/opla/metadata/id2item.csv', # id_item df
-        'vectorizer_class_path': './data/opla/vect/deep/saved_model/model.pkl', # vectorizer_model_class
-        'vectorizer_deep_path': './data/opla/vect/deep/saved_model/deepvec.ckpt' # load values of matrix tensorflow
-    }
+parser  = argparse.ArgumentParser()
 
-    # load old model
-    old = OldModel(**old_params)
-    #old.load_lightfm_matrix('./data/')
+parser.add_argument('--model_path',type=str,dest='model_path',help='path storing model class')
+parser.add_argument('--model_deep_path',type=str,dest='model_deep_path',help='path storing weight of model')
+parser.add_argument('--profilevocab_path',type=str,dest='profilevocab_path',help='id2profile dataframe path')
+parser.add_argument('--itemvocab_path',type=str,dest='itemvocab_path',help='id2item dataframe path')
+parser.add_argument('--vectorizer_class_path',type=str,dest='vectorizer_class_path',help='vectorizer_class_path')
+parser.add_argument('--vectorizer_deep_path',type=str,dest='vectorizer_deep_path',help='vectorizer_deep_path')
+parser.add_argument('--lightfm_path',type=str,dest='lightfm_path',help='lightfm_path')
 
-    old.load_lightfm_matrix(lightfm_path="./data/opla/matrix_decompose/lightfm.pkl")
+args    = vars(parser.parse_known_args()[0])
 
-    json_data = json.load(open('./data/opla/raw/zipper-2018-01-23--08-01/acyras.json'))
+"""
+USAGE:
+python eval_v2.py --model_path=./saved_model/dropoutnet_opla_vTest/model.pkl --model_deep_path=./saved_model/dropoutnet_opla_vTest/model.ckpt
+--profilevocab_path=./data/opla/metadata/out/id2profile.csv --itemvocab_path=./data/opla/metadata/out/id2item.csv --vectorizer_class_path=./data/opla/vect/deep/saved_model/model.pkl --vectorizer_deep_path=./data/opla/vect/deep/saved_model/deepvec.ckpt --lightfm_path=./data/opla/matrix_decompose/lightfm.pkl
+"""
 
-    json_datas = [json_data]
+def get_json_from_dir(dir_path):
+    json_datas = []
 
+    for path in os.listdir(dir_path):
+        json_data = json.load(path)
+        json_datas.append(json_data)
+
+    return json_datas
+
+def eval(json_datas,model=None,n_user=629,n_item=12,topk=5):
     row_ids = []
     col_ids = []
 
+    # get target matrix
     for i, json_data in enumerate(json_datas):
-        cats = json_data['category'].keys()
+        cats = json_data['category'].keys()  # category
 
         cats_ids = [old.item2id[cat] for cat in cats]
         prof_ids = [i] * len(cats)
@@ -164,15 +174,14 @@ if __name__ == '__main__':
             np.ones(len(row_ids)),
             (row_ids, col_ids)
         ),
-        shape=(629, 12)
+        shape=(n_user, n_item)
     ).toarray()
 
-    # predict
+    # get predict
     predict_col_ids = old.predict(json_datas)
-    topk = 3
-    predict_col_ids = predict_col_ids[:,:topk]
+    predict_col_ids = predict_col_ids[:, :topk]
 
-    row_ids = np.repeat(range(len(json_datas)),topk) #np.asarray([[i] * len(r) for i,r in enumerate(predict_col_ids)],dtype='int32').reshape(-1)
+    row_ids = np.repeat(range(len(json_datas)), topk)
     col_ids = predict_col_ids.reshape(-1)
 
     predict_matrix = coo_matrix(
@@ -180,29 +189,31 @@ if __name__ == '__main__':
             np.ones(len(row_ids)),
             (row_ids, col_ids)
         ),
-        shape=(629, 12)
+        shape=(n_user, n_item)
     ).toarray()
 
-    print my_eval(target_matrix,predict_matrix)
-    #
-    # # calculate
-    # y_nz = [sum(x) > 0 for x in target_matrix]
-    # y_nz = np.arange(target_matrix.shape[0])[y_nz]
-    #
-    # preds_all = predict_matrix[y_nz, :]
-    # y = target_matrix[y_nz, :]
-    #
-    # import scipy
-    # x = scipy.sparse.lil_matrix(y.shape)
-    # x.rows = predict_col_ids
-    # x.data = np.ones_like(predict_col_ids)
-    # x = x.toarray()
-    #
-    # z = x * y
-    # print np.mean(np.divide((np.sum(z, 1)), np.sum(y, 1)))
+    return my_eval_metric(target_matrix, predict_matrix)
 
-    # print old.predict([json_data])
-    # print old.predict([json_data])
-    # print old.predict([json_data])
-    # print old.predict([json_data])
-    # print old.predict([json_data])
+if __name__ == '__main__':
+
+    # test
+    old_params = {
+        'model_path': './saved_model/vTest/model.pkl', # model_class_path ()
+        'model_deep_path': './saved_model/vTest/model.ckpt', # load values of matrix tensorflow
+        'profilevocab_path': './fake_data/opla/metadata/id2profile.csv', # id_profile df
+        'itemvocab_path': './fake_data/opla/metadata/id2item.csv', # id_item df
+        'vectorizer_class_path': './fake_data/opla/vect/deep/saved_model/model.pkl', # vectorizer_model_class
+        'vectorizer_deep_path': './fake_data/opla/vect/deep/saved_model/deepvec.ckpt' # load values of matrix tensorflow
+    }
+
+    # load old model
+    old = OldModel(**args)
+    old.load_lightfm_matrix(lightfm_path=args['lightfm_path'])
+
+    #exit()
+
+    json_data = json.load(open('./data/opla/raw/zipper-2018-01-23--08-01/acyras.json'))
+
+    json_datas = [json_data]
+
+    print eval(json_datas,old,629,12,5)

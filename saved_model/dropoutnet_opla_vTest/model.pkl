@@ -1,4 +1,4 @@
-(inn.nn_with_dropoutnet_v2
+(inn.nn_with_dropoutnet
 RecommendNet
 p1
 (dp2
@@ -10,7 +10,7 @@ sS'item_feature_dim'
 p5
 I200
 sS'k'
-I5
+I6
 sS'latent_dim'
 p6
 I200
@@ -19,7 +19,7 @@ p7
 I01
 sS'default_lr'
 p8
-F0.002
+F0.001
 sS'train_signal'
 p9
 S'training'

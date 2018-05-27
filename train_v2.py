@@ -55,7 +55,7 @@ def main_v2(u_preference_path, v_preference_path, u_bias_path, v_bias_path, u_co
 
     model = NN_v2(latent_dim=200,user_feature_dim=200,item_feature_dim=200,out_dim=200,default_lr=learning_rate,k=topk)
 
-    cPickle.dump(model,open('./saved_model/dropoutnet_opla_vTest/model.pkl','w'))
+    cPickle.dump(model,open('./saved_model/dropoutnet_opla_vTest_2/model.pkl','w'))
     model.build()
 
     for epoch_id in range(n_epoch):
@@ -130,7 +130,7 @@ def score(target,tf_eval_preds_batch):
     return np.mean(np.divide((np.sum(z, 1)), np.sum(y, 1)))
 
 if __name__ == '__main__':
-    sub_path = './data/opla'
+    sub_path = './fake_data/opla'
 
     params = {
         'test_cold_user_path': sub_path + '/split/test_cold_user.csv',
@@ -143,7 +143,7 @@ if __name__ == '__main__':
         'v_bias_path': sub_path + '/matrix_decompose/V_bias.csv.bin',
         'u_content_path': sub_path + '/vect/deep/profile.csv.bin',
         'v_content_path': sub_path + '/vect/deep/item.csv.bin',
-        'saved_model': './saved_model/dropoutnet_opla_vTest',
+        'saved_model': './saved_model/dropoutnet_opla_vTest_2',
         'batch_size': 100,
         'n_epoch': 20,
         'dropout': 0.3,

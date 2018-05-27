@@ -1,2 +1,0 @@
-model_checkpoint_path: "dropoutnet.ckpt"
-all_model_checkpoint_paths: "dropoutnet.ckpt"

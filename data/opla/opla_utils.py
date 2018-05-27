@@ -1,6 +1,6 @@
 import json
 import numpy as np
-from pymf.nmf import NMF
+#from pymf.nmf import NMF
 import pandas as pd
 import json
 
@@ -38,7 +38,7 @@ def merge_multiple_json(path):
         with open(file_name,'r') as f:
             data = json.load(f)
             if type(data) is dict: result[file_name.replace('.json','')] = data
-            else: print 'data in %s is invalid, pls check !!!' % file_name
+            else: print 'fake_data in %s is invalid, pls check !!!' % file_name
 
     return result
 
@@ -97,11 +97,7 @@ def get_profile_detail(profile):
             institution = education_dct.get('institution','')
             study = education_dct.get('studyType','')
 
-            #result = "study: %s, institution: %s" % (study, institution)
             results.append({'institution':institution,'study':study})
-
-        #results = list(set(results))
-        #results = ' ; '.join(results)
 
         results = json.dumps(results)
 
@@ -111,8 +107,6 @@ def get_profile_detail(profile):
         required_key = 'skills'
 
         results = [{'skill':e} for e in _profile.get(required_key,[])]
-        #results = list(set(results))
-        #results = " ; ".join(results)
         results = json.dumps(results)
 
         return required_key, results
@@ -128,8 +122,8 @@ def get_profile_detail(profile):
 
 def get_metadata(datas):
     """
-    build metadata from raw data. This method is designed for opla only. Require modifications if you use it for others.
-    :param data: raw data, dictionary
+    build metadata from raw datas. This method is designed for opla only. Require modifications if you use it for others.
+    :param datas: data, type dictionary
     :return: utility matrix, item details, profile details
     """
 
@@ -141,12 +135,14 @@ def get_metadata(datas):
     for _ , data in datas.items():
         profile_name, item_name = None, None
 
-        # for profile
+        # extracted profile data for user, because two user may have the same nick name
+        # so we will concatenate user nick name and its profile link to form the unique one.
         if type(data) is dict and required_profile_key in data.keys() :
             profile_name = "%s|%s" % (data[required_profile_key].get('name',''),
                                       data[required_profile_key].get('profile',''))
 
             profile_details[profile_name] = get_profile_detail(data)
+            print ('extracted data of profile: %s ...' % data[required_profile_key].get('name',''))
 
         # for item
         if type(data) is dict and required_item_key in data.keys():
@@ -154,6 +150,7 @@ def get_metadata(datas):
                 for k,v in data[required_item_key].items():
 
                     item_detail = get_item_detail(v)
+                    print ('extracted data for category %s ...' % k)
 
                     #item_detail_to_str = json.dumps(item_detail) #" ; ".join(list(set(item_detail)))
                     if k in item_details:

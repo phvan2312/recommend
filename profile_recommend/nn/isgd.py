@@ -97,7 +97,19 @@ class ISGD:
 
         return err
 
-    def recommend(self, u_index, N, history_vec = None):
+    def recommends(self, u_indexs, N):
+        """
+        Recommend Top-N items for list of users
+        """
+        for u_index in u_indexs:
+            if u_index not in self.known_users: raise ValueError('Error: the user is not known.')
+
+        recos  = []
+        scores = np.abs(1. - np.dot(np.array([self.U[u_indexs]]), self.V.T)).reshape((len(u_indexs),self.V.shape[0]))
+
+        return np.argsort(scores,axis=1)[:,:N]
+
+    def recommend(self, u_index, N):
         """
         Recommend Top-N items for the user u
         """
@@ -107,16 +119,8 @@ class ISGD:
         recos = []
         scores = np.abs(1. - np.dot(np.array([self.U[u_index]]), self.V.T)).reshape(self.V.shape[0])
 
-        if history_vec is None: return np.argsort(scores)[:N]
+        return np.argsort(scores)[:N]
 
-        cnt = 0
-        for i_index in np.argsort(scores):
-            if history_vec[i_index] == 1: continue
-            recos.append(i_index)
-            cnt += 1
-            if cnt == N: break
-
-        return recos
 
 if __name__ == '__main__':
     main()

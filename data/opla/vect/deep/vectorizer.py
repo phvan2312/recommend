@@ -1,9 +1,21 @@
+"""
+Usage: assume that we're in deep folder
+python vectorizer.py --item_detail_path=./../../metadata/out/item.csv --batch_size=32 --n_epochs=10 --class_path=./saved_model/model.pkl --saved_path=./saved_model/deepvec.ckpt
+--out_item_vect_path=./out/item.csv.bin --profile_detail_path=./../../metadata/out/profile.csv --out_profile_vect_path=./out/profile.csv.bin
+"""
+"""
+--out_item_vect_path',help='path storing item vectors, empty if do not want',dest='out_item_vect_path',type=str)
+parser.add_argument('--profile_detail_path',help='path containing profile information',dest='profile_detail_path',type=str)
+parser.add_argument('--out_profile_vect_path'
+"""
+
 import tensorflow as tf
 import pandas as pd
 import numpy as np
 import random
 import cPickle
 import json
+import argparse
 
 def extract_work_from_item(work_desc):
     works = [[w['work'] for w in work] for work in json.loads(work_desc)]
@@ -56,7 +68,7 @@ def random_mapping(word2id, text_len):
     vocab_len = len(word2id)
     return [np.random.randint(0,vocab_len) for _ in xrange(text_len)]
 
-class ItemVectorizerModel:
+class VectorizerModel:
     def __init__(self,item_dim,profile_dim,n_item,n_profile,lr,max_sen_len,dropout_prob,word2id):
         self.item_dim = item_dim
         self.profile_dim = profile_dim
@@ -245,70 +257,87 @@ def pad_common(sequences, pad_tok, max_length):
 
     return sequence_padded, sequence_length
 
-saved_path = './saved_model/deepvec.ckpt'
-class_path = './saved_model/model.pkl'
-item_vect_path = './item.csv.bin'
-profile_vect_path = './profile.csv.bin'
+# saved_path = './saved_model/deepvec.ckpt'
+# class_path = './saved_model/model.pkl'
+# item_vect_path = './item.csv.bin'
+# profile_vect_path = './profile.csv.bin'
 
-if __name__ == '__main__':
-    item_detail_path = './../../metadata/item.csv'
+parser  = argparse.ArgumentParser()
+
+parser.add_argument('--item_detail_path',help='path containing item information', dest='item_detail_path',type=str)
+parser.add_argument('--batch_size',help='number of samples per batch',dest='batch_size',type=int)
+parser.add_argument('--n_epochs',help='number of epochs',dest='n_epochs',type=int)
+parser.add_argument('--class_path',help='path for storing class',dest='class_path',type=str)
+parser.add_argument('--saved_path',help='path for storing weighted matrix',dest='saved_path',type=str)
+parser.add_argument('--out_item_vect_path',help='path storing item vectors, empty if do not want',dest='out_item_vect_path',type=str)
+parser.add_argument('--profile_detail_path',help='path containing profile information',dest='profile_detail_path',type=str)
+parser.add_argument('--out_profile_vect_path',help='path storing profile vectors, empty if do not want',dest='out_profile_vect_path',type=str)
+
+args    = vars(parser.parse_known_args()[0])
+
+def train(item_detail_path,batch_size,n_epochs,class_path,saved_path,**kargs):
+    # load data from file
     item_detail = pd.read_csv(item_detail_path, sep=',')
     item_detail.fillna('', inplace=True)
+    print ('loaded %d items from %s ...' % (item_detail.shape[0], item_detail_path))
 
-    #item_descs = item_detail['desc'].tolist()
-    item_extract_works  = [extract_work_from_item(work_desc) for work_desc in item_detail['work'].tolist()] #extract_work(texts=item_descs) #works which corresponding with each items
-    item_extract_skills = [extract_skill_from_item(skill_desc) for skill_desc in item_detail['skill'].tolist()] #extract_skill(texts=item_descs)
 
+    # extract work and skills
+    item_extract_works = [extract_work_from_item(work_desc) for work_desc in item_detail['work'].tolist()]
+    item_extract_skills = [extract_skill_from_item(skill_desc) for skill_desc in item_detail['skill'].tolist()]
+
+    # building vocabulary
     id2word, word2id = build_vocab(item_extract_skills + item_extract_works)
 
     # create dataset
-    print 'create dataset ...'
     assert len(item_extract_works) == len(item_extract_skills)
-    datasets = []
 
+    datasets = []
     for item_id, (works, skills) in enumerate(zip(item_extract_works, item_extract_skills)):
         dataset = {}
 
         dataset['item_id'] = item_id
         for work in works:
-            tmp_dataset = dataset.copy()
-            tmp_dataset['work_pos'] = mapping(word2id,work)
-            tmp_dataset['skill'] = random_mapping(word2id,np.random.randint(3,6))
-            tmp_dataset['work_pos_point'] = 1.0
-            tmp_dataset['skill_point'] = 0.0
+            sample = dataset.copy()
+            sample['work_pos'] = mapping(word2id,work)
+            sample['skill'] = random_mapping(word2id,np.random.randint(3,6))
+            sample['work_pos_point'] = 1.0
+            sample['skill_point'] = 0.0
 
-            datasets.append(tmp_dataset)
+            datasets.append(sample)
 
         for skill in skills:
-            tmp_dataset = dataset.copy()
-            tmp_dataset['skill'] = mapping(word2id,skill)
-            tmp_dataset['work_pos'] = random_mapping(word2id,np.random.randint(3,6))
-            tmp_dataset['work_pos_point'] = 0.0
-            tmp_dataset['skill_point'] = 1.0
+            sample = dataset.copy()
+            sample['skill'] = mapping(word2id,skill)
+            sample['work_pos'] = random_mapping(word2id,np.random.randint(3,6))
+            sample['work_pos_point'] = 0.0
+            sample['skill_point'] = 1.0
 
-            datasets.append(tmp_dataset)
+            datasets.append(sample)
 
     random.shuffle(datasets)
+    print ('created dataset, with %d samples ...' % len(datasets))
 
-    train_datasets, test_datasets = datasets, [] #datasets[:-20], datasets[-20:]
+    train_datasets, test_datasets = datasets, []
 
     # create batchs
-    batch_size = 32
-    batch_ids = [(batch_start, min(batch_start + 32,len(datasets))) for batch_start in range(0,len(train_datasets),batch_size)]
+    batch_ids = [(batch_start, min(batch_start + 32, len(datasets))) for batch_start in
+                 range(0, len(train_datasets), batch_size)]
 
     batchs = []
     for start, end in batch_ids: batchs.append(train_datasets[start:end])
+    print ('created batches, with batch_size: %d, have %d batchs ...' % (batch_size,len(batchs)))
 
     # build model
-    model = ItemVectorizerModel(item_dim=200,profile_dim=100,n_item=item_detail.shape[0],n_profile=len(word2id),lr=0.001,
-                                max_sen_len=5,dropout_prob=0.6,word2id=word2id)
+    model = VectorizerModel(item_dim=200, profile_dim=100, n_item=item_detail.shape[0], n_profile=len(word2id),
+                            lr=0.001, max_sen_len=5, dropout_prob=0.6, word2id=word2id)
     cPickle.dump(model, open(class_path, 'w'))
+    print ('saved class model to %s ...' % class_path)
+
     model.build()
 
     # training
-    n_epochs = 10
-    print 'training ...'
-
+    print ('start training ...')
     for epoch_id in range(n_epochs):
         all_loss = []
 
@@ -320,32 +349,26 @@ if __name__ == '__main__':
 
         print 'e%i_loss: %.4f' % (epoch_id + 1, np.mean(all_loss))
 
-    print 'testing...'
-    for dataset in test_datasets:
-        s,w = model.run([dataset],mode='inference')
-
-        label = ''
-        if dataset['work_pos_point'] > 0:
-            label = 'label: work'
-        elif dataset['skill_point'] > 0:
-            label = 'label: skill'
-
-        label += '  predicted: w_%.3f, s_%.3f' % (w,s)
-        print label
-
-    print 'saving ...'
+    # saving
 
     model.save(save_path=saved_path)
+    print ('saved weight model to %s ...' % saved_path)
 
-    # get item vector
-    print 'get item vector ...'
-    item_vects = model.get_item_vector(item_id=range(item_detail.shape[0]))
+    return model
+
+def extract_item_vector(model, item_detail_path, out_item_vect_path,**kargs):
+    item_detail = pd.read_csv(item_detail_path, sep=',')
+    item_detail.fillna('', inplace=True)
+
+    n_items = item_detail.shape[0]
+
+    item_vects = model.get_item_vector(item_id=range(n_items))
     print ('item_vects shape: ', item_vects.shape)
-    item_vects.tofile(open(item_vect_path,'w'))
+    item_vects.tofile(open(out_item_vect_path, 'w'))
 
-    # get profile vector
-    print 'get profile vector ...'
-    profile_detail_path = './../../metadata/profile.csv'
+    print ('saved item_vectors to file %s ...' % out_item_vect_path)
+
+def extract_profile_vector(model, profile_detail_path, out_profile_vect_path,**kargs):
     profile_detail = pd.read_csv(profile_detail_path, sep=',')
     profile_detail.fillna('', inplace=True)
 
@@ -353,9 +376,18 @@ if __name__ == '__main__':
     profile_skills = [extract_skill_from_user(skill_desc) for skill_desc in profile_detail['skills'].tolist()]
 
     assert len(profile_works) == len(profile_skills)
-    profile_vects = model.get_profile_vector(works=profile_works,skills=profile_skills)
+    profile_vects = model.get_profile_vector(works=profile_works, skills=profile_skills)
 
     print ('profile_vects shape: ', profile_vects.shape)
 
-    profile_vects.tofile(open(profile_vect_path, 'w'))
-    print  'finished ...'
+    profile_vects.tofile(open(out_profile_vect_path, 'w'))
+    print ('saved profile_vectors to file %s ...' % out_profile_vect_path)
+
+if __name__ == '__main__':
+    model = train(**args)
+
+    if args['out_item_vect_path'] != '':
+        extract_item_vector(model=model,item_detail_path=args['item_detail_path'],out_item_vect_path=args['out_item_vect_path'])
+
+    if args['out_profile_vect_path'] != '':
+        extract_profile_vector(model=model,profile_detail_path=args['profile_detail_path'],out_profile_vect_path=args['out_profile_vect_path'])
